@@ -1,5 +1,6 @@
 ﻿var urlParams = new URLSearchParams(window.location.search);
 var modelUrl = urlParams.get("model");
+var isMini = urlParams.get("mini") === "1";
 
 if (!modelUrl) {
     document.getElementById("loading").innerText = "错误：未找到模型地址";
@@ -11,6 +12,15 @@ function initThree(url) {
     var container = document.getElementById("canvas-container");
     var loadingDiv = document.getElementById("loading");
 
+    // mini 模式：简化 UI
+    if (isMini) {
+        var toolbar = document.getElementById("toolbar");
+        var info = document.getElementById("info");
+        if (toolbar) toolbar.style.display = "none";
+        if (info) info.style.display = "none";
+        loadingDiv.style.fontSize = "12px";
+    }
+
     // 1. 场景、相机、渲染器
     var scene = new THREE.Scene();
     scene.background = new THREE.Color(0x2b2b2b);
@@ -19,10 +29,12 @@ function initThree(url) {
     camera.position.set(100, 200, 300);
 
     var renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (!isMini) {
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
     container.appendChild(renderer.domElement);
 
     // 2. 轨道控制器
@@ -77,7 +89,6 @@ function initThree(url) {
     var loader = new THREE.FBXLoader();
     loader.load(url,
         function (object) {
-            // 后处理材质：白色改灰色
             object.traverse(function (child) {
                 if (child.isMesh && child.material) {
                     var materials = Array.isArray(child.material) ? child.material : [child.material];
@@ -87,7 +98,6 @@ function initThree(url) {
                             mat.color.setHex(0x888888);
                         }
                     }
-                    // 为每个 mesh 创建线框叠层
                     try {
                         var edges = new THREE.EdgesGeometry(child.geometry, 30);
                         var line = new THREE.LineSegments(
@@ -98,13 +108,10 @@ function initThree(url) {
                         line.rotation.copy(child.rotation);
                         line.scale.copy(child.scale);
                         wireframeGroup.add(line);
-                    } catch (e) {
-                        // 几何体不兼容 EdgesGeometry 时跳过
-                    }
+                    } catch (e) {}
                 }
             });
 
-            // 自动缩放和居中
             var box = new THREE.Box3().setFromObject(object);
             var size = box.getSize(new THREE.Vector3()).length();
             var center = box.getCenter(new THREE.Vector3());

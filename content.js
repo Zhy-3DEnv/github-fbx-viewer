@@ -16,6 +16,7 @@
   }
 
   function openPreviewModal(rawUrl) {
+    removeHoverPreview();
     var modalId = "fbx-preview-modal";
     if (document.getElementById(modalId)) return;
 
@@ -71,7 +72,104 @@
     document.body.appendChild(overlay);
   }
 
-  // 绝对定位按钮层，挂在 body 上，完全脱离 GitLab 事件链
+  // 悬停小窗状态
+  var hoverState = {
+    timer: null,
+    closeTimer: null,
+    previewEl: null,
+    btn: null
+  };
+
+  function removeHoverPreview() {
+    if (hoverState.timer) { clearTimeout(hoverState.timer); hoverState.timer = null; }
+    if (hoverState.closeTimer) { clearTimeout(hoverState.closeTimer); hoverState.closeTimer = null; }
+    if (hoverState.previewEl && hoverState.previewEl.parentNode) {
+      hoverState.previewEl.parentNode.removeChild(hoverState.previewEl);
+    }
+    hoverState.previewEl = null;
+    hoverState.btn = null;
+  }
+
+  function showHoverPreview(rawUrl, btn) {
+    removeHoverPreview();
+    hoverState.btn = btn;
+
+    var viewerUrl = chrome.runtime.getURL(
+      "viewer.html?model=" + encodeURIComponent(rawUrl) + "&mini=1"
+    );
+
+    var panel = document.createElement("div");
+    panel.className = "fbx-hover-preview";
+    panel.style.cssText =
+      "position:fixed;z-index:99990;" +
+      "width:360px;height:270px;" +
+      "background:#1a1a1a;border-radius:8px;" +
+      "overflow:hidden;" +
+      "box-shadow:0 4px 24px rgba(0,0,0,0.6);" +
+      "border:1px solid rgba(255,255,255,0.1);";
+
+    var iframe = document.createElement("iframe");
+    iframe.src = viewerUrl;
+    iframe.style.cssText =
+      "width:100%;height:100%;border:none;";
+
+    panel.appendChild(iframe);
+
+    // 鼠标离开按钮和小窗时，延时关闭
+    panel.addEventListener("mouseenter", function () {
+      if (hoverState.closeTimer) { clearTimeout(hoverState.closeTimer); hoverState.closeTimer = null; }
+    });
+    panel.addEventListener("mouseleave", function () {
+      hoverState.closeTimer = setTimeout(removeHoverPreview, 300);
+    });
+
+    document.body.appendChild(panel);
+    hoverState.previewEl = panel;
+
+    // 定位：按钮右侧，确保不超出视口
+    positionHoverPanel(btn, panel);
+  }
+
+  function positionHoverPanel(btn, panel) {
+    var btnRect = btn.getBoundingClientRect();
+    var panelW = 360, panelH = 270;
+    var left = btnRect.right + 10;
+    var top = btnRect.top - panelH / 2 + btnRect.height / 2;
+
+    // 不超出右边界
+    if (left + panelW > window.innerWidth - 10) {
+      left = btnRect.left - panelW - 10;
+    }
+    // 不超出左边界
+    if (left < 10) left = 10;
+    // 不超出下边界
+    if (top + panelH > window.innerHeight - 10) {
+      top = window.innerHeight - panelH - 10;
+    }
+    // 不超出上边界
+    if (top < 10) top = 10;
+
+    panel.style.left = left + "px";
+    panel.style.top = top + "px";
+  }
+
+  // 按钮进入：开始 2s 计时
+  function onBtnEnter(rawUrl, btn) {
+    removeHoverPreview();
+    hoverState.timer = setTimeout(function () {
+      showHoverPreview(rawUrl, btn);
+    }, 2000);
+  }
+
+  // 按钮离开：取消计时 / 触发延时关闭
+  function onBtnLeave() {
+    if (hoverState.timer) { clearTimeout(hoverState.timer); hoverState.timer = null; }
+    if (hoverState.previewEl) {
+      hoverState.closeTimer = setTimeout(removeHoverPreview, 300);
+    }
+  }
+
+  // 绝对定位按钮层
   var treeBtnsContainer = null;
 
   function ensureTreeBtnsContainer() {
@@ -142,14 +240,24 @@
           "padding:2px 8px;font-size:11px;cursor:pointer;" +
           "font-weight:500;white-space:nowrap;pointer-events:auto;";
 
+        // 点击 → 全屏弹窗
         btn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
+          removeHoverPreview();
           openPreviewModal(url);
         });
         btn.addEventListener("mousedown", function (e) {
           e.preventDefault();
           e.stopPropagation();
+        });
+
+        // 悬停 2s → 小窗预览
+        btn.addEventListener("mouseenter", function () {
+          onBtnEnter(url, btn);
+        });
+        btn.addEventListener("mouseleave", function () {
+          onBtnLeave();
         });
 
         treeBtnsContainer.appendChild(btn);
@@ -231,7 +339,6 @@
       openPreviewModal(toRawUrl(window.location.href));
     });
     document.body.appendChild(floatBtn);
-    console.log("[FBX Viewer] \u6d6e\u52a8\u6309\u94ae\u5df2\u6ce8\u5165\uff08\u515c\u5e95\uff09");
   }
 
   function scan() {
@@ -258,8 +365,10 @@
 
   tryAdd();
 
-  // 滚动时重新定位树按钮
-  window.addEventListener("scroll", scheduleReposition, { passive: true });
+  window.addEventListener("scroll", function () {
+    removeHoverPreview();
+    scheduleReposition();
+  }, { passive: true });
   window.addEventListener("resize", scheduleReposition, { passive: true });
 
   var observer = new MutationObserver(function () {
