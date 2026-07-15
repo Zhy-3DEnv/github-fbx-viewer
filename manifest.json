@@ -1,14 +1,14 @@
 ﻿{
   "manifest_version": 3,
-  "name": "GitHub FBX Viewer",
+  "name": "FBX 3D Viewer",
   "version": "1.0.0",
-  "description": "在 GitHub 页面中直接预览 FBX 三维模型",
+  "description": "在 GitHub / GitLab 页面中直接预览 FBX 三维模型",
   "permissions": [
     "activeTab"
   ],
   "content_scripts": [
     {
-      "matches": ["https://github.com/*"],
+      "matches": ["https://github.com/*", "https://git.sofunny.io/*"],
       "js": ["content.js"],
       "run_at": "document_end"
     }
@@ -16,7 +16,7 @@
   "web_accessible_resources": [
     {
       "resources": ["viewer.html", "viewer.js", "three.min.js", "fflate.min.js", "FBXLoader.js", "OrbitControls.js"],
-      "matches": ["https://github.com/*"]
+      "matches": ["https://github.com/*", "https://git.sofunny.io/*"]
     }
   ]
 }

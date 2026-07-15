@@ -1,4 +1,4 @@
-( function () {
+﻿( function () {
 
 	/**
  * THREE.Loader loads FBX file and generates THREE.Group representing FBX scene.
@@ -429,7 +429,7 @@
 			switch ( type.toLowerCase() ) {
 
 				case 'phong':
-					material = new THREE.MeshPhongMaterial();
+					material = new THREE.MeshPhongMaterial( { color: 0x888888 } );
 					break;
 
 				case 'lambert':
@@ -438,7 +438,7 @@
 
 				default:
 					console.warn( 'THREE.FBXLoader: unknown material type "%s". Defaulting to THREE.MeshPhongMaterial.', type );
-					material = new THREE.MeshPhongMaterial();
+					material = new THREE.MeshPhongMaterial( { color: 0x888888 } );
 					break;
 
 			}

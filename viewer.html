@@ -17,12 +17,29 @@
             transform: translateX(-50%);
             color: #666; font-size: 12px; pointer-events: none;
         }
+        #toolbar {
+            position: absolute; bottom: 16px; left: 16px;
+            display: flex; gap: 8px; z-index: 10;
+        }
+        #toolbar button {
+            background: rgba(255,255,255,0.1); color: #ccc;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px; padding: 6px 14px;
+            font-size: 13px; cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        #toolbar button:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        #toolbar button.active { background: rgba(255,255,255,0.25); color: #fff; border-color: rgba(255,255,255,0.4); }
     </style>
 </head>
 <body>
     <div id="loading">正在下载并解析 FBX 模型...</div>
     <div id="info">鼠标左键旋转 | 滚轮缩放 | 右键平移</div>
     <div id="canvas-container"></div>
+    <div id="toolbar">
+        <button id="btn-grid" class="active" title="切换网格显示">网格</button>
+    </div>
 
     <script src="three.min.js"></script>
     <script src="fflate.min.js"></script>

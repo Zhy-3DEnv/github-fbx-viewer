@@ -49,14 +49,61 @@ function initThree(url) {
     dirLight.shadow.camera.far = 2000;
     scene.add(dirLight);
 
-    // 4. 参考网格
+    // 4. 参考网格（地面，常显）
     var gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x333333);
     scene.add(gridHelper);
+
+    // 线框叠层容器
+    var wireframeGroup = new THREE.Group();
+    wireframeGroup.visible = true;
+    scene.add(wireframeGroup);
+
+    // 线框开关
+    var wireframeVisible = true;
+    var btnGrid = document.getElementById("btn-grid");
+    if (btnGrid) {
+        btnGrid.addEventListener("click", function () {
+            wireframeVisible = !wireframeVisible;
+            wireframeGroup.visible = wireframeVisible;
+            if (wireframeVisible) {
+                btnGrid.classList.add("active");
+            } else {
+                btnGrid.classList.remove("active");
+            }
+        });
+    }
 
     // 5. 加载 FBX 模型
     var loader = new THREE.FBXLoader();
     loader.load(url,
         function (object) {
+            // 后处理材质：白色改灰色
+            object.traverse(function (child) {
+                if (child.isMesh && child.material) {
+                    var materials = Array.isArray(child.material) ? child.material : [child.material];
+                    for (var m = 0; m < materials.length; m++) {
+                        var mat = materials[m];
+                        if (mat.color && mat.color.getHex() === 0xffffff) {
+                            mat.color.setHex(0x888888);
+                        }
+                    }
+                    // 为每个 mesh 创建线框叠层
+                    try {
+                        var edges = new THREE.EdgesGeometry(child.geometry, 30);
+                        var line = new THREE.LineSegments(
+                            edges,
+                            new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1, transparent: true, opacity: 0.4 })
+                        );
+                        line.position.copy(child.position);
+                        line.rotation.copy(child.rotation);
+                        line.scale.copy(child.scale);
+                        wireframeGroup.add(line);
+                    } catch (e) {
+                        // 几何体不兼容 EdgesGeometry 时跳过
+                    }
+                }
+            });
+
             // 自动缩放和居中
             var box = new THREE.Box3().setFromObject(object);
             var size = box.getSize(new THREE.Vector3()).length();
@@ -65,6 +112,7 @@ function initThree(url) {
             object.position.x -= center.x;
             object.position.y -= center.y;
             object.position.z -= center.z;
+            wireframeGroup.position.copy(object.position);
 
             camera.position.copy(center);
             camera.position.x += size / 1.5;
