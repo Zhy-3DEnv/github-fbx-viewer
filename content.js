@@ -4,10 +4,8 @@
   // 统一的原始文件 URL 转换：支持 GitHub 和 GitLab
   function toRawUrl(blobUrl) {
     if (blobUrl.indexOf("git.sofunny.io") >= 0) {
-      // 标准 GitLab: /-/blob/ → /-/raw/
       var raw = blobUrl.replace("/-/blob/", "/-/raw/");
       if (raw !== blobUrl) return raw;
-      // 兼容无 /-/ 的 GitLab 路径
       return blobUrl.replace("/blob/", "/raw/");
     }
     if (blobUrl.indexOf("github.com") >= 0) {
@@ -75,6 +73,50 @@
     document.body.appendChild(overlay);
   }
 
+  // 为目录页中每个 .fbx 链接添加预览按钮
+  function addTreePreviewButtons() {
+    var pathname = window.location.pathname;
+    var isTree = pathname.indexOf("/tree/") >= 0 || pathname.indexOf("/-/tree/") >= 0;
+    if (!isTree) return;
+
+    var links = document.querySelectorAll('a[href$=".fbx"], a[href$=".FBX"]');
+    for (var i = 0; i < links.length; i++) {
+      var link = links[i];
+      if (link.dataset.fbxTreeBtn) continue;
+      link.dataset.fbxTreeBtn = "1";
+
+      var href = link.getAttribute("href");
+      if (!href) continue;
+
+      // 构造完整 blob URL
+      var blobUrl;
+      if (href.indexOf("://") >= 0) {
+        blobUrl = href;
+      } else {
+        blobUrl = window.location.origin + href;
+      }
+
+      var rawUrl = toRawUrl(blobUrl);
+
+      var btn = document.createElement("button");
+      btn.textContent = "3D \u9884\u89c8";
+      btn.title = "\u9884\u89c8 " + link.textContent.trim();
+      btn.style.cssText =
+        "background:#0969da;color:#fff;border:none;border-radius:4px;" +
+        "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;" +
+        "font-weight:500;white-space:nowrap;vertical-align:middle;";
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openPreviewModal(rawUrl);
+      });
+
+      // 插入到链接后面
+      link.style.display = "inline";
+      link.parentNode.insertBefore(btn, link.nextSibling);
+    }
+  }
+
   function addPreviewButton() {
     var pathname = window.location.pathname.toLowerCase();
     if (!pathname.endsWith(".fbx")) return;
@@ -126,7 +168,7 @@
       });
 
       target.appendChild(btn);
-      console.log("[FBX Viewer] 按钮已注入，域名:", window.location.hostname, "选择器:", selectors[i]);
+      console.log("[FBX Viewer] \u6309\u94ae\u5df2\u6ce8\u5165\uff0c\u57df\u540d:", window.location.hostname, "\u9009\u62e9\u5668:", selectors[i]);
       return;
     }
 
@@ -143,28 +185,36 @@
       openPreviewModal(toRawUrl(window.location.href));
     });
     document.body.appendChild(floatBtn);
-    console.log("[FBX Viewer] 浮动按钮已注入（兜底）");
+    console.log("[FBX Viewer] \u6d6e\u52a8\u6309\u94ae\u5df2\u6ce8\u5165\uff08\u515c\u5e95\uff09");
+  }
+
+  // 统一入口：单文件页 + 目录页
+  function scan() {
+    addPreviewButton();
+    addTreePreviewButtons();
   }
 
   var attempts = 0;
   var maxAttempts = 30;
   function tryAdd() {
-    addPreviewButton();
-    var found =
+    scan();
+    var done =
       document.getElementById("github-fbx-preview-btn") ||
       document.getElementById("github-fbx-preview-float");
-    if (!found && attempts < maxAttempts && window.location.pathname.toLowerCase().endsWith(".fbx")) {
-      attempts++;
-      setTimeout(tryAdd, 800);
+    if (!done && attempts < maxAttempts) {
+      var pathname = window.location.pathname.toLowerCase();
+      var isTree = pathname.indexOf("/tree/") >= 0 || pathname.indexOf("/-/tree/") >= 0;
+      if (pathname.endsWith(".fbx") || isTree) {
+        attempts++;
+        setTimeout(tryAdd, 800);
+      }
     }
   }
 
   tryAdd();
 
   var observer = new MutationObserver(function () {
-    if (window.location.pathname.toLowerCase().endsWith(".fbx")) {
-      addPreviewButton();
-    }
+    scan();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 })();
