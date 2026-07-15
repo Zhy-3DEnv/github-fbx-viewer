@@ -1,0 +1,16 @@
+﻿# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dependencies (we commit them for offline use)
+# node_modules/
+
+# Git
+.git/
