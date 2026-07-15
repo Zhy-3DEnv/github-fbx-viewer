@@ -158,7 +158,7 @@
     removeHoverPreview();
     hoverState.timer = setTimeout(function () {
       showHoverPreview(rawUrl, btn);
-    }, 1000);
+    }, 500);
   }
 
   // 按钮离开：取消计时 / 触发延时关闭
