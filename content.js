@@ -71,16 +71,59 @@
     document.body.appendChild(overlay);
   }
 
+  // 绝对定位按钮层，挂在 body 上，完全脱离 GitLab 事件链
+  var treeBtnsContainer = null;
+
+  function ensureTreeBtnsContainer() {
+    if (treeBtnsContainer && treeBtnsContainer.parentNode) return;
+    if (document.getElementById("fbx-tree-btns-container")) {
+      treeBtnsContainer = document.getElementById("fbx-tree-btns-container");
+      return;
+    }
+    treeBtnsContainer = document.createElement("div");
+    treeBtnsContainer.id = "fbx-tree-btns-container";
+    treeBtnsContainer.style.cssText =
+      "position:absolute;top:0;left:0;width:0;height:0;z-index:100;pointer-events:none;";
+    document.body.appendChild(treeBtnsContainer);
+  }
+
+  function repositionTreeBtns() {
+    var btns = treeBtnsContainer.querySelectorAll("[data-fbx-link-id]");
+    for (var b = 0; b < btns.length; b++) {
+      var btn = btns[b];
+      var linkId = btn.dataset.fbxLinkId;
+      var link = document.querySelector('[data-fbx-tree-link="' + linkId + '"]');
+      if (link) {
+        var rect = link.getBoundingClientRect();
+        btn.style.top = (window.scrollY + rect.top + rect.height / 2 - 10) + "px";
+        btn.style.left = (window.scrollX + rect.right + 8) + "px";
+        btn.style.display = "";
+      } else {
+        btn.style.display = "none";
+      }
+    }
+  }
+
+  var repositionTimer = null;
+  function scheduleReposition() {
+    if (repositionTimer) clearTimeout(repositionTimer);
+    repositionTimer = setTimeout(repositionTreeBtns, 50);
+  }
+
   function addTreePreviewButtons() {
     var pathname = window.location.pathname;
     var isTree = pathname.indexOf("/tree/") >= 0 || pathname.indexOf("/-/tree/") >= 0;
     if (!isTree) return;
 
+    ensureTreeBtnsContainer();
+
     var links = document.querySelectorAll('a[href$=".fbx"], a[href$=".FBX"]');
     for (var i = 0; i < links.length; i++) {
       var link = links[i];
-      if (link.dataset.fbxTreeBtn) continue;
-      link.dataset.fbxTreeBtn = "1";
+      if (link.dataset.fbxTreeLink) continue;
+
+      var linkId = "fbx-" + i + "-" + Date.now();
+      link.dataset.fbxTreeLink = linkId;
 
       var href = link.getAttribute("href");
       if (!href) continue;
@@ -88,33 +131,36 @@
       var blobUrl = (href.indexOf("://") >= 0) ? href : window.location.origin + href;
       var rawUrl = toRawUrl(blobUrl);
 
-      // IIFE 避免闭包错误，每个按钮拿到自己的 rawUrl
-      (function (url, fileName, linkEl) {
+      (function (url, linkEl, id) {
         var btn = document.createElement("button");
+        btn.dataset.fbxLinkId = id;
         btn.textContent = "3D \u9884\u89c8";
-        btn.title = "\u9884\u89c8 " + fileName;
+        btn.title = "\u9884\u89c8 " + (linkEl.textContent || "").trim();
         btn.style.cssText =
+          "position:absolute;" +
           "background:#0969da;color:#fff;border:none;border-radius:4px;" +
-          "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;" +
-          "font-weight:500;white-space:nowrap;vertical-align:middle;";
+          "padding:2px 8px;font-size:11px;cursor:pointer;" +
+          "font-weight:500;white-space:nowrap;pointer-events:auto;";
 
         btn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
-          e.stopImmediatePropagation();
           openPreviewModal(url);
-        }, true);
+        });
+        btn.addEventListener("mousedown", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        });
 
-        // 插入到 td / tree-item / tr 容器末尾，避开可点击的行区域
-        var row = linkEl.closest("td, .tree-item, tr, .file-row");
-        if (row) {
-          row.appendChild(btn);
-        } else {
-          linkEl.style.display = "inline";
-          linkEl.parentNode.insertBefore(btn, linkEl.nextSibling);
-        }
-      })(rawUrl, link.textContent.trim(), link);
+        treeBtnsContainer.appendChild(btn);
+
+        var rect = linkEl.getBoundingClientRect();
+        btn.style.top = (window.scrollY + rect.top + rect.height / 2 - 10) + "px";
+        btn.style.left = (window.scrollX + rect.right + 8) + "px";
+      })(rawUrl, link, linkId);
     }
+
+    scheduleReposition();
   }
 
   function addPreviewButton() {
@@ -212,8 +258,13 @@
 
   tryAdd();
 
+  // 滚动时重新定位树按钮
+  window.addEventListener("scroll", scheduleReposition, { passive: true });
+  window.addEventListener("resize", scheduleReposition, { passive: true });
+
   var observer = new MutationObserver(function () {
     scan();
+    scheduleReposition();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 })();
