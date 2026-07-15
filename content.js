@@ -1,7 +1,6 @@
 ﻿(function () {
   "use strict";
 
-  // 统一的原始文件 URL 转换：支持 GitHub 和 GitLab
   function toRawUrl(blobUrl) {
     if (blobUrl.indexOf("git.sofunny.io") >= 0) {
       var raw = blobUrl.replace("/-/blob/", "/-/raw/");
@@ -16,7 +15,6 @@
     return blobUrl;
   }
 
-  // 创建内嵌预览弹窗
   function openPreviewModal(rawUrl) {
     var modalId = "fbx-preview-modal";
     if (document.getElementById(modalId)) return;
@@ -73,7 +71,6 @@
     document.body.appendChild(overlay);
   }
 
-  // 为目录页中每个 .fbx 链接添加预览按钮
   function addTreePreviewButtons() {
     var pathname = window.location.pathname;
     var isTree = pathname.indexOf("/tree/") >= 0 || pathname.indexOf("/-/tree/") >= 0;
@@ -88,32 +85,35 @@
       var href = link.getAttribute("href");
       if (!href) continue;
 
-      // 构造完整 blob URL
-      var blobUrl;
-      if (href.indexOf("://") >= 0) {
-        blobUrl = href;
-      } else {
-        blobUrl = window.location.origin + href;
-      }
-
+      var blobUrl = (href.indexOf("://") >= 0) ? href : window.location.origin + href;
       var rawUrl = toRawUrl(blobUrl);
 
-      var btn = document.createElement("button");
-      btn.textContent = "3D \u9884\u89c8";
-      btn.title = "\u9884\u89c8 " + link.textContent.trim();
-      btn.style.cssText =
-        "background:#0969da;color:#fff;border:none;border-radius:4px;" +
-        "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;" +
-        "font-weight:500;white-space:nowrap;vertical-align:middle;";
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openPreviewModal(rawUrl);
-      });
+      // IIFE 避免闭包错误，每个按钮拿到自己的 rawUrl
+      (function (url, fileName, linkEl) {
+        var btn = document.createElement("button");
+        btn.textContent = "3D \u9884\u89c8";
+        btn.title = "\u9884\u89c8 " + fileName;
+        btn.style.cssText =
+          "background:#0969da;color:#fff;border:none;border-radius:4px;" +
+          "padding:2px 8px;font-size:11px;cursor:pointer;margin-left:6px;" +
+          "font-weight:500;white-space:nowrap;vertical-align:middle;";
 
-      // 插入到链接后面
-      link.style.display = "inline";
-      link.parentNode.insertBefore(btn, link.nextSibling);
+        btn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          openPreviewModal(url);
+        }, true);
+
+        // 插入到 td / tree-item / tr 容器末尾，避开可点击的行区域
+        var row = linkEl.closest("td, .tree-item, tr, .file-row");
+        if (row) {
+          row.appendChild(btn);
+        } else {
+          linkEl.style.display = "inline";
+          linkEl.parentNode.insertBefore(btn, linkEl.nextSibling);
+        }
+      })(rawUrl, link.textContent.trim(), link);
     }
   }
 
@@ -188,7 +188,6 @@
     console.log("[FBX Viewer] \u6d6e\u52a8\u6309\u94ae\u5df2\u6ce8\u5165\uff08\u515c\u5e95\uff09");
   }
 
-  // 统一入口：单文件页 + 目录页
   function scan() {
     addPreviewButton();
     addTreePreviewButtons();
