@@ -1,7 +1,7 @@
 ﻿{
   "manifest_version": 3,
   "name": "FBX 3D Viewer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "在 GitHub / GitLab 页面中直接预览 FBX 三维模型",
   "icons": {
     "16": "icon16.png",

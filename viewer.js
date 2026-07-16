@@ -105,9 +105,9 @@ function initThree(url) {
                     var materials = Array.isArray(child.material) ? child.material : [child.material];
                     for (var m = 0; m < materials.length; m++) {
                         var mat = materials[m];
-                        if (mat.color && mat.color.getHex() === 0xffffff) {
-                            mat.color.setHex(0x888888);
-                        }
+                        // 双面渲染：修复 FBX 法向不一致导致的黑面
+                        mat.side = THREE.DoubleSide;
+                        mat.needsUpdate = true;
                     }
                     try {
                         var edges = new THREE.EdgesGeometry(child.geometry, 30);
