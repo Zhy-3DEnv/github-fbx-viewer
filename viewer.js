@@ -12,7 +12,6 @@ function initThree(url) {
     var container = document.getElementById("canvas-container");
     var loadingDiv = document.getElementById("loading");
 
-    // mini 模式：简化 UI
     if (isMini) {
         var toolbar = document.getElementById("toolbar");
         var info = document.getElementById("info");
@@ -61,26 +60,38 @@ function initThree(url) {
     dirLight.shadow.camera.far = 2000;
     scene.add(dirLight);
 
-    // 4. 参考网格（地面，常显）
+    // 4. 参考网格
     var gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x333333);
     scene.add(gridHelper);
 
-    // 线框叠层容器
+    // 线框叠层
     var wireframeGroup = new THREE.Group();
     wireframeGroup.visible = true;
     scene.add(wireframeGroup);
 
+    // 顶点法线叠层
+    var normalGroup = new THREE.Group();
+    normalGroup.visible = false;
+    scene.add(normalGroup);
+
+    // ---- 工具栏按钮 ----
     var wireframeVisible = true;
     var btnGrid = document.getElementById("btn-grid");
     if (btnGrid) {
         btnGrid.addEventListener("click", function () {
             wireframeVisible = !wireframeVisible;
             wireframeGroup.visible = wireframeVisible;
-            if (wireframeVisible) {
-                btnGrid.classList.add("active");
-            } else {
-                btnGrid.classList.remove("active");
-            }
+            btnGrid.classList.toggle("active", wireframeVisible);
+        });
+    }
+
+    var normalVisible = false;
+    var btnNormals = document.getElementById("btn-normals");
+    if (btnNormals) {
+        btnNormals.addEventListener("click", function () {
+            normalVisible = !normalVisible;
+            normalGroup.visible = normalVisible;
+            btnNormals.classList.toggle("active", normalVisible);
         });
     }
 
@@ -118,58 +129,41 @@ function initThree(url) {
             var bboxSize = new THREE.Vector3();
             box.getSize(bboxSize);
 
-            // 将模型移至原点
             object.position.x -= center.x;
             object.position.y -= center.y;
             object.position.z -= center.z;
             wireframeGroup.position.copy(object.position);
 
-            // 包围球半径（最长轴的一半）
             var maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z);
             var radius = Math.max(maxDim * 0.5, 1);
 
-            // 基于 FOV 计算刚好容纳模型的距离
-            // 公式：distance = radius / sin(fov / 2)
             var fovRad = camera.fov * Math.PI / 180;
             var fitDistance = radius / Math.sin(fovRad / 2);
-            var distance = fitDistance * 1.6; // 留 60% 边距，看着不贴边
+            var distance = fitDistance * 1.6;
 
-            // 根据模型比例智能选择相机角度
             var isFlat = bboxSize.y < bboxSize.x * 0.3 && bboxSize.y < bboxSize.z * 0.3;
             var isTall = bboxSize.y > bboxSize.x * 2 || bboxSize.y > bboxSize.z * 2;
             var camX, camY, camZ;
             if (isFlat) {
-                // 扁平模型（悬浮岛、地形）：从更上方看
-                camX = distance * 0.5;
-                camY = distance * 0.85;
-                camZ = distance * 0.5;
+                camX = distance * 0.5; camY = distance * 0.85; camZ = distance * 0.5;
             } else if (isTall) {
-                // 瘦高模型：从侧方看
-                camX = distance * 0.8;
-                camY = distance * 0.35;
-                camZ = distance * 0.6;
+                camX = distance * 0.8; camY = distance * 0.35; camZ = distance * 0.6;
             } else {
-                // 默认对角线视角
-                camX = distance * 0.7;
-                camY = distance * 0.5;
-                camZ = distance * 0.7;
+                camX = distance * 0.7; camY = distance * 0.5; camZ = distance * 0.7;
             }
 
             camera.position.set(center.x + camX, center.y + camY, center.z + camZ);
             camera.lookAt(center);
 
-            // 同步更新 near/far 裁剪面
             camera.near  = Math.max(0.1, distance * 0.001);
             camera.far   = distance * 15;
             camera.updateProjectionMatrix();
 
-            // 控制器限制
             controls.target.copy(center);
             controls.minDistance = distance * 0.15;
             controls.maxDistance = distance * 8;
             controls.update();
 
-            // 重建网格：尺寸匹配模型
             scene.remove(gridHelper);
             var gridExtent = maxDim * 3;
             var divisions  = Math.min(60, Math.max(20, Math.round(gridExtent / 2)));
@@ -178,7 +172,6 @@ function initThree(url) {
             gridHelper.position.y = box.min.y + object.position.y - maxDim * 0.01;
             scene.add(gridHelper);
 
-            // 同步方向光阴影范围
             dirLight.shadow.camera.near   = camera.near;
             dirLight.shadow.camera.far    = camera.far;
             dirLight.shadow.camera.left   = -maxDim;
@@ -186,6 +179,9 @@ function initThree(url) {
             dirLight.shadow.camera.top    =  maxDim;
             dirLight.shadow.camera.bottom = -maxDim;
             dirLight.shadow.camera.updateProjectionMatrix();
+
+            // ========== 顶点法线可视化 ==========
+            generateNormalLines(object, maxDim);
 
             scene.add(object);
             loadingDiv.style.display = "none";
@@ -201,6 +197,56 @@ function initThree(url) {
             loadingDiv.innerText = "模型加载失败（可能是私有仓库或跨域限制）";
         }
     );
+
+    // ---- 生成顶点法线线段 ----
+    function generateNormalLines(rootObject, maxDim) {
+        if (normalGroup.children.length > 0) return;
+
+        var normalLen = maxDim * 0.04;
+        var lineData = [];
+
+        rootObject.updateWorldMatrix(true, true);
+
+        rootObject.traverse(function (child) {
+            if (!child.isMesh || !child.geometry) return;
+            var posAttr = child.geometry.attributes.position;
+            var norAttr = child.geometry.attributes.normal;
+            if (!posAttr || !norAttr) return;
+
+            child.updateWorldMatrix(true, false);
+            var m = child.matrixWorld;
+
+            var count = posAttr.count;
+            var step  = Math.max(1, Math.floor(count / 3000));
+
+            for (var i = 0; i < count; i += step) {
+                var px = posAttr.getX(i), py = posAttr.getY(i), pz = posAttr.getZ(i);
+                var nx = norAttr.getX(i), ny = norAttr.getY(i), nz = norAttr.getZ(i);
+
+                var wp = new THREE.Vector3(px, py, pz).applyMatrix4(m);
+                var wn = new THREE.Vector3(nx, ny, nz).transformDirection(m).normalize();
+
+                if (wn.length() < 0.0001) continue;
+
+                lineData.push(wp.x, wp.y, wp.z);
+                lineData.push(wp.x + wn.x * normalLen, wp.y + wn.y * normalLen, wp.z + wn.z * normalLen);
+            }
+        });
+
+        if (lineData.length > 0) {
+            var normalGeo = new THREE.BufferGeometry();
+            normalGeo.setAttribute("position", new THREE.Float32BufferAttribute(lineData, 3));
+            var normalLines = new THREE.LineSegments(
+                normalGeo,
+                new THREE.LineBasicMaterial({
+                    color: 0xff6644,
+                    linewidth: 1,
+                    depthTest: true
+                })
+            );
+            normalGroup.add(normalLines);
+        }
+    }
 
     // 6. 动画循环
     function animate() {
