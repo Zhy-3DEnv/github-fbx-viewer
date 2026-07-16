@@ -25,7 +25,7 @@ function initThree(url) {
     var scene = new THREE.Scene();
     scene.background = new THREE.Color(0x2b2b2b);
 
-    var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+    var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
     camera.position.set(100, 200, 300);
 
     var renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -70,7 +70,6 @@ function initThree(url) {
     wireframeGroup.visible = true;
     scene.add(wireframeGroup);
 
-    // 线框开关
     var wireframeVisible = true;
     var btnGrid = document.getElementById("btn-grid");
     if (btnGrid) {
@@ -89,6 +88,7 @@ function initThree(url) {
     var loader = new THREE.FBXLoader();
     loader.load(url,
         function (object) {
+            // 生成线框叠层
             object.traverse(function (child) {
                 if (child.isMesh && child.material) {
                     var materials = Array.isArray(child.material) ? child.material : [child.material];
@@ -112,27 +112,80 @@ function initThree(url) {
                 }
             });
 
+            // ========== BBOX 自适应显示 ==========
             var box = new THREE.Box3().setFromObject(object);
-            var size = box.getSize(new THREE.Vector3()).length();
             var center = box.getCenter(new THREE.Vector3());
+            var bboxSize = new THREE.Vector3();
+            box.getSize(bboxSize);
 
+            // 将模型移至原点
             object.position.x -= center.x;
             object.position.y -= center.y;
             object.position.z -= center.z;
             wireframeGroup.position.copy(object.position);
 
-            camera.position.copy(center);
-            camera.position.x += size / 1.5;
-            camera.position.y += size / 1.5;
-            camera.position.z += size / 1.5;
+            // 包围球半径（最长轴的一半）
+            var maxDim = Math.max(bboxSize.x, bboxSize.y, bboxSize.z);
+            var radius = Math.max(maxDim * 0.5, 1);
+
+            // 基于 FOV 计算刚好容纳模型的距离
+            // 公式：distance = radius / sin(fov / 2)
+            var fovRad = camera.fov * Math.PI / 180;
+            var fitDistance = radius / Math.sin(fovRad / 2);
+            var distance = fitDistance * 1.6; // 留 60% 边距，看着不贴边
+
+            // 根据模型比例智能选择相机角度
+            var isFlat = bboxSize.y < bboxSize.x * 0.3 && bboxSize.y < bboxSize.z * 0.3;
+            var isTall = bboxSize.y > bboxSize.x * 2 || bboxSize.y > bboxSize.z * 2;
+            var camX, camY, camZ;
+            if (isFlat) {
+                // 扁平模型（悬浮岛、地形）：从更上方看
+                camX = distance * 0.5;
+                camY = distance * 0.85;
+                camZ = distance * 0.5;
+            } else if (isTall) {
+                // 瘦高模型：从侧方看
+                camX = distance * 0.8;
+                camY = distance * 0.35;
+                camZ = distance * 0.6;
+            } else {
+                // 默认对角线视角
+                camX = distance * 0.7;
+                camY = distance * 0.5;
+                camZ = distance * 0.7;
+            }
+
+            camera.position.set(center.x + camX, center.y + camY, center.z + camZ);
             camera.lookAt(center);
 
+            // 同步更新 near/far 裁剪面
+            camera.near  = Math.max(0.1, distance * 0.001);
+            camera.far   = distance * 15;
+            camera.updateProjectionMatrix();
+
+            // 控制器限制
             controls.target.copy(center);
-            controls.maxDistance = size * 10;
+            controls.minDistance = distance * 0.15;
+            controls.maxDistance = distance * 8;
             controls.update();
 
+            // 重建网格：尺寸匹配模型
+            scene.remove(gridHelper);
+            var gridExtent = maxDim * 3;
+            var divisions  = Math.min(60, Math.max(20, Math.round(gridExtent / 2)));
+            gridHelper = new THREE.GridHelper(gridExtent, divisions, 0x444444, 0x333333);
             gridHelper.position.copy(center);
-            gridHelper.position.y = box.min.y - 1;
+            gridHelper.position.y = box.min.y + object.position.y - maxDim * 0.01;
+            scene.add(gridHelper);
+
+            // 同步方向光阴影范围
+            dirLight.shadow.camera.near   = camera.near;
+            dirLight.shadow.camera.far    = camera.far;
+            dirLight.shadow.camera.left   = -maxDim;
+            dirLight.shadow.camera.right  =  maxDim;
+            dirLight.shadow.camera.top    =  maxDim;
+            dirLight.shadow.camera.bottom = -maxDim;
+            dirLight.shadow.camera.updateProjectionMatrix();
 
             scene.add(object);
             loadingDiv.style.display = "none";
